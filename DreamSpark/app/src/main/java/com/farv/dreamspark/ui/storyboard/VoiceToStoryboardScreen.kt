@@ -3,10 +3,16 @@ package com.farv.dreamspark.ui.storyboard
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.media.AudioManager
+import android.media.AudioDeviceInfo
 import android.os.Build
+import android.os.Looper
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -22,10 +28,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,16 +40,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import java.io.File
-import java.io.IOException
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.LaunchedEffect
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 
 @Composable
 fun VoiceToStoryboardScreen() {
@@ -54,30 +56,20 @@ fun VoiceToStoryboardScreen() {
     var currentPlaybackPosition by remember { mutableStateOf(0) }
     var isAudioPlaying by remember { mutableStateOf(false) }
     val audioRecorder = remember { AudioRecorder(context) }
-    val scope = rememberCoroutineScope()
 
-    // Request audio permission
-    val requestPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        isGranted: Boolean ->
-        if (isGranted) {
-            Log.d("VoiceToStoryboardScreen", "RECORD_AUDIO permission granted")
-        } else {
-            Log.e("VoiceToStoryboardScreen", "RECORD_AUDIO permission denied")
-            // Handle the case where permission is denied
-        }
+    DisposableEffect(Unit) {
+        onDispose { audioRecorder.release() }
     }
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     LaunchedEffect(Unit) {
-        when {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> {
-                Log.d("VoiceToStoryboardScreen", "RECORD_AUDIO permission already granted")
-            }
-            else -> {
-                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
-
 
     Scaffold { innerPadding ->
         Column(
@@ -97,7 +89,12 @@ fun VoiceToStoryboardScreen() {
                         audioDuration = audioRecorder.getDuration()
                     }
                 }
-                PlayButton(isAudioRecorded, isAudioPlaying, audioDuration, currentPlaybackPosition) {
+                PlayButton(
+                        isAudioRecorded,
+                        isAudioPlaying,
+                        audioDuration,
+                        currentPlaybackPosition
+                ) {
                     isAudioPlaying = true
                     audioRecorder.play {
                         currentPlaybackPosition = it
@@ -183,34 +180,36 @@ class AudioRecorder(private val context: Context) {
     private var audioFile: File? = null
     private var mediaRecorder: MediaRecorder? = null
     private var player: MediaPlayer? = null
-    private var isCurrentlyPlaying: Boolean = false
+    private val handler = android.os.Handler(Looper.getMainLooper())
+    private var progressRunnable: Runnable? = null
+
+    fun release() {
+        mediaRecorder?.release()
+        mediaRecorder = null
+        player?.release()
+        player = null
+        progressRunnable?.let { handler.removeCallbacks(it) }
+        progressRunnable = null
+    }
 
     fun start() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            audioFile = File(context.cacheDir, "audio.m4a")
+        audioFile = File(context.cacheDir, "audio.m4a")
+        mediaRecorder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(context)
         } else {
-            @Suppress("DEPRECATION") audioFile = File(context.cacheDir, "audio.3gp")
+            @Suppress("DEPRECATION") MediaRecorder()
+        }).apply {
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            setOutputFile(audioFile?.absolutePath)
+            try {
+                prepare()
+                start()
+            } catch (e: Exception) {
+                Log.e("AudioRecorder", "Failed to start recording", e)
+            }
         }
-
-        mediaRecorder =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            MediaRecorder(context)
-                        } else {
-                            @Suppress("DEPRECATION") MediaRecorder()
-                        }
-                        .apply {
-                            setAudioSource(MediaRecorder.AudioSource.MIC)
-                            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                            setOutputFile(audioFile?.absolutePath)
-                            try {
-                                prepare()
-                                start()
-                                Log.d("AudioRecorder", "Recording started")
-                            } catch (e: Exception) { // Changed IOException to Exception
-                                Log.e("AudioRecorder", "Failed to start recording", e)
-                            }
-                        }
     }
 
     fun stop() {
@@ -219,67 +218,74 @@ class AudioRecorder(private val context: Context) {
             release()
         }
         mediaRecorder = null
-        Log.d("AudioRecorder", "Recording stopped")
     }
 
     fun getDuration(): Int {
-        if (audioFile?.exists() == true) {
-            MediaPlayer().apply {
-                setDataSource(audioFile?.absolutePath)
-                prepare()
-                val duration = duration
-                release()
-                return duration
+        audioFile?.takeIf { it.exists() }?.let {
+            val tempPlayer = MediaPlayer()
+            try {
+                tempPlayer.setDataSource(it.absolutePath)
+                tempPlayer.prepare()
+                return tempPlayer.duration
+            } finally {
+                tempPlayer.release()
             }
         }
         return 0
     }
 
     fun play(onProgress: (Int) -> Unit) {
-        if (audioFile?.exists() == true) {
+        audioFile?.takeIf { it.exists() }?.let { file ->
             try {
                 player?.release()
                 player = MediaPlayer().apply {
-                    setDataSource(audioFile?.absolutePath)
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    setDataSource(file.absolutePath)
                     prepare()
-                    start()
-                    isCurrentlyPlaying = true
 
-                    // Update progress periodically
-                    val updateInterval = 100L // milliseconds
-                    val runnable =
-                            object : Runnable {
-                                override fun run() {
-                                    if (isCurrentlyPlaying) {
-                                        onProgress(currentPosition)
-                                        if (currentPosition < duration) {
-                                            // schedule next update
-                                            player?.let { p ->
-                                                android.os.Handler()
-                                                        .postDelayed(this, updateInterval)
-                                            }
-                                        } else {
-                                            isCurrentlyPlaying = false
-                                            onProgress(
-                                                    duration
-                                            ) // Ensure last update is full duration
-                                            release()
-                                        }
-                                    }
-                                }
-                            }
-                    player?.setOnCompletionListener {
-                        isCurrentlyPlaying = false
+                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    audioManager.mode = AudioManager.MODE_NORMAL
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        val devices = audioManager.availableCommunicationDevices
+                        val speaker = devices.find { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                        speaker?.let { audioManager.setCommunicationDevice(it) }
+                    } else {
+                        @Suppress("DEPRECATION") audioManager.isSpeakerphoneOn = true
+                    }
+
+                    setOnCompletionListener {
+                        progressRunnable?.let { handler.removeCallbacks(it) }
                         onProgress(duration)
                         release()
+                        player = null
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            audioManager.clearCommunicationDevice()
+                        } else {
+                            @Suppress("DEPRECATION") audioManager.isSpeakerphoneOn = false
+                        }
+                        audioManager.mode = AudioManager.MODE_NORMAL
                     }
-                    android.os.Handler().postDelayed(runnable, updateInterval)
+                    start()
+                    progressRunnable = object : Runnable {
+                        override fun run() {
+                            player?.let {
+                                if (it.isPlaying) {
+                                    onProgress(it.currentPosition)
+                                    handler.postDelayed(this, 100)
+                                }
+                            }
+                        }
+                    }
+                    handler.post(progressRunnable!!)
                 }
-            } catch (e: IOException) {
+            } catch (e: Exception) {
                 Log.e("AudioRecorder", "Error playing audio", e)
             }
-        } else {
-            Log.e("AudioRecorder", "Audio file not found")
         }
     }
 }
