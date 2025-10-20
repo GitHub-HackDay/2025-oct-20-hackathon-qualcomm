@@ -1,0 +1,5 @@
+third_party/
+.venv/
+third_party/models/*/config.yaml
+third_party/models/*/outputs/
+.env

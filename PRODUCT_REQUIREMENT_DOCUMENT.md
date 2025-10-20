@@ -1,6 +1,6 @@
 # TinyStories - Project Specification
 
-## Executive Summary
+## Overview
 
 **TinyStories** is an Android mobile application that transforms children's audio dictations into illustrated story characters using on-device AI inference. The app leverages Qualcomm hardware acceleration and ExecuTorch for efficient, privacy-preserving AI processing directly on the device.
 
