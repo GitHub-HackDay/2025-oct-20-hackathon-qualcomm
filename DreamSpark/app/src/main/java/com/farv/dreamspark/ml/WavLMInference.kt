@@ -19,11 +19,9 @@ class WavLMInference(private val context: Context) {
     fun initialize(modelFile: File): Boolean {
         return try {
             val modelBuffer = loadModelFile(modelFile)
-            val options =
-                    Interpreter.Options().apply {
-                        setNumThreads(4)
-                        setUseNNAPI(true)
-                    }
+            val options = Interpreter.Options()
+            options.setNumThreads(4)
+            options.setUseNNAPI(true)
             interpreter = Interpreter(modelBuffer, options)
             isInitialized = true
             Log.d(TAG, "WavLM model initialized successfully")
@@ -52,7 +50,11 @@ class WavLMInference(private val context: Context) {
                     Array(outputShape[0]) { Array(outputShape[1]) { FloatArray(outputShape[2]) } }
             interpreter!!.run(input, output)
             Log.d(TAG, "Inference completed. Output shape: ${outputShape.contentToString()}")
-            output[0].flatMap { it.asIterable() }.toFloatArray()
+            val result = mutableListOf<Float>()
+            for (arr in output[0]) {
+                result.addAll(arr.toList())
+            }
+            result.toFloatArray()
         } catch (e: Exception) {
             Log.e(TAG, "Inference failed", e)
             null

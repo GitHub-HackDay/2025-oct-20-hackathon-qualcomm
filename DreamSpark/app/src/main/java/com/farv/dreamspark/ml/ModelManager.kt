@@ -12,16 +12,17 @@ class ModelManager(private val context: Context) {
         private const val MODEL_FILENAME = "wavlm_base_plus.tflite"
         private const val MODEL_URL = "https://huggingface.co/qualcomm/HuggingFace-WavLM-Base-Plus/resolve/main/HuggingFace-WavLM-Base-Plus.tflite"
     }
-    private val modelFile: File
-        get() = File(context.filesDir, MODEL_FILENAME)
+    private fun getModelFilePath(): File = File(context.filesDir, MODEL_FILENAME)
     fun isModelDownloaded(): Boolean {
-        return modelFile.exists() && modelFile.length() > 0
+        val file = getModelFilePath()
+        return file.exists() && file.length() > 0
     }
     suspend fun downloadModel(onProgress: (Int) -> Unit = {}): Result<File> = withContext(Dispatchers.IO) {
         try {
+            val file = getModelFilePath()
             if (isModelDownloaded()) {
                 Log.d(TAG, "Model already exists")
-                return@withContext Result.success(modelFile)
+                return@withContext Result.success(file)
             }
             Log.d(TAG, "Downloading model from $MODEL_URL")
             val url = URL(MODEL_URL)
@@ -29,7 +30,7 @@ class ModelManager(private val context: Context) {
             connection.connect()
             val fileLength = connection.contentLength
             connection.getInputStream().use { input ->
-                FileOutputStream(modelFile).use { output ->
+                FileOutputStream(file).use { output ->
                     val buffer = ByteArray(8192)
                     var total = 0L
                     var count: Int
@@ -44,21 +45,23 @@ class ModelManager(private val context: Context) {
                 }
             }
             Log.d(TAG, "Model downloaded successfully")
-            Result.success(modelFile)
+            Result.success(file)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to download model", e)
-            if (modelFile.exists()) {
-                modelFile.delete()
+            val file = getModelFilePath()
+            if (file.exists()) {
+                file.delete()
             }
             Result.failure(e)
         }
     }
     fun getModelFile(): File? {
-        return if (isModelDownloaded()) modelFile else null
+        return if (isModelDownloaded()) getModelFilePath() else null
     }
     fun deleteModel() {
-        if (modelFile.exists()) {
-            modelFile.delete()
+        val file = getModelFilePath()
+        if (file.exists()) {
+            file.delete()
             Log.d(TAG, "Model deleted")
         }
     }
