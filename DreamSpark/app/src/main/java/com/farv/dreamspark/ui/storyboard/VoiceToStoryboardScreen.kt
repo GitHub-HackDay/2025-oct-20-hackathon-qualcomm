@@ -20,13 +20,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -44,21 +52,54 @@ import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.farv.dreamspark.ml.AudioPreprocessor
+import com.farv.dreamspark.ml.ModelManager
+import com.farv.dreamspark.ml.SpeechToTextRecognizer
+import com.farv.dreamspark.ml.WavLMInference
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
 fun VoiceToStoryboardScreen() {
     val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var isRecording by remember { mutableStateOf(false) }
     var isAudioRecorded by remember { mutableStateOf(false) }
     var currentGifUri by remember { mutableStateOf<String?>(null) }
     var audioDuration by remember { mutableStateOf(0) }
     var currentPlaybackPosition by remember { mutableStateOf(0) }
     var isAudioPlaying by remember { mutableStateOf(false) }
+    var modelStatus by remember { mutableStateOf("Checking model...") }
+    var inferenceResult by remember { mutableStateOf<String?>(null) }
+    var isProcessing by remember { mutableStateOf(false) }
+    var liveTranscript by remember { mutableStateOf("") }
+    var fullTranscript by remember { mutableStateOf("") }
+    var showTranscriptDialog by remember { mutableStateOf(false) }
     val audioRecorder = remember { AudioRecorder(context) }
+    val modelManager = remember { ModelManager(context) }
+    val wavLMInference = remember { WavLMInference(context) }
+    val speechRecognizer = remember { SpeechToTextRecognizer(context) }
 
     DisposableEffect(Unit) {
-        onDispose { audioRecorder.release() }
+        onDispose {
+            audioRecorder.release()
+            wavLMInference.release()
+            speechRecognizer.release()
+        }
+    }
+    LaunchedEffect(Unit) {
+        launch {
+            speechRecognizer.partialTranscript.collect { text ->
+                liveTranscript = text
+            }
+        }
+        launch {
+            speechRecognizer.fullTranscript.collect { text ->
+                fullTranscript = text
+            }
+        }
     }
 
     val requestPermissionLauncher = rememberLauncherForActivityResult(
@@ -69,6 +110,36 @@ fun VoiceToStoryboardScreen() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+        scope.launch {
+            if (!modelManager.isModelDownloaded()) {
+                modelStatus = "Downloading model..."
+                val result = modelManager.downloadModel { progress ->
+                    modelStatus = "Downloading model... $progress%"
+                }
+                result.onSuccess { file ->
+                    modelStatus = "Initializing model..."
+                    withContext(Dispatchers.IO) {
+                        if (wavLMInference.initialize(file)) {
+                            modelStatus = "Model ready"
+                        } else {
+                            modelStatus = "Model initialization failed"
+                        }
+                    }
+                }.onFailure {
+                    modelStatus = "Model download failed: ${it.message}"
+                }
+            } else {
+                modelStatus = "Initializing model..."
+                withContext(Dispatchers.IO) {
+                    val file = modelManager.getModelFile()
+                    if (file != null && wavLMInference.initialize(file)) {
+                        modelStatus = "Model ready"
+                    } else {
+                        modelStatus = "Model initialization failed"
+                    }
+                }
+            }
+        }
     }
 
     Scaffold { innerPadding ->
@@ -78,15 +149,74 @@ fun VoiceToStoryboardScreen() {
                 verticalArrangement = Arrangement.Bottom
         ) {
             DisplayCanvas(currentGifUri)
-            Row(horizontalArrangement = Arrangement.Center) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = modelStatus, color = if (modelStatus == "Model ready") Color.Green else Color.White)
+                if (isProcessing) {
+                    Text(text = "Processing audio...", color = Color.Yellow)
+                }
+                if (inferenceResult != null) {
+                    Text(text = "WavLM embeddings: $inferenceResult", color = Color.White)
+                }
+            }
+            if (liveTranscript.isNotEmpty() && isRecording) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Live Transcript:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = liveTranscript,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.padding(8.dp)) {
                 RecordButton(isRecording) {
                     isRecording = !isRecording
                     if (isRecording) {
                         audioRecorder.start()
+                        speechRecognizer.reset()
+                        speechRecognizer.startListening()
+                        inferenceResult = null
+                        liveTranscript = ""
                     } else {
+                        speechRecognizer.stopListening()
                         audioRecorder.stop()
                         isAudioRecorded = true
                         audioDuration = audioRecorder.getDuration()
+                        scope.launch {
+                            isProcessing = true
+                            withContext(Dispatchers.IO) {
+                                try {
+                                    val audioFile = audioRecorder.getAudioFile()
+                                    if (audioFile != null) {
+                                        val features = AudioPreprocessor.extractAudioFeatures(audioFile)
+                                        if (features != null) {
+                                            val output = wavLMInference.runInference(features)
+                                            if (output != null) {
+                                                inferenceResult = "Embeddings: ${output.size} features"
+                                            } else {
+                                                inferenceResult = "Inference failed"
+                                            }
+                                        } else {
+                                            inferenceResult = "Feature extraction failed"
+                                        }
+                                    } else {
+                                        inferenceResult = "Audio file not found"
+                                    }
+                                } catch (e: Exception) {
+                                    inferenceResult = "Error: ${e.message}"
+                                }
+                            }
+                            isProcessing = false
+                        }
                     }
                 }
                 PlayButton(
@@ -104,8 +234,18 @@ fun VoiceToStoryboardScreen() {
                         }
                     }
                 }
+                ViewTranscriptButton(
+                    enabled = isAudioRecorded && fullTranscript.isNotEmpty(),
+                    onClick = { showTranscriptDialog = true }
+                )
             }
         }
+    }
+    if (showTranscriptDialog) {
+        TranscriptDialog(
+            transcript = fullTranscript,
+            onDismiss = { showTranscriptDialog = false }
+        )
     }
 }
 
@@ -132,13 +272,41 @@ fun PlayButton(
                 "$timeLeft s left"
             } else if (enabled) {
                 val totalDuration = audioDuration / 1000
-                "Play Recording ($totalDuration s)"
+                "Play ($totalDuration s)"
             } else {
                 "Play Recording"
             }
     Button(onClick = onClick, enabled = enabled, modifier = Modifier.padding(8.dp)) {
         Text(text = displayTime)
     }
+}
+@Composable
+fun ViewTranscriptButton(enabled: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.padding(8.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+    ) {
+        Text(text = "View Transcript")
+    }
+}
+@Composable
+fun TranscriptDialog(transcript: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Full Transcript") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(text = transcript.ifEmpty { "No transcript available" })
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 @Composable
@@ -182,6 +350,7 @@ class AudioRecorder(private val context: Context) {
     private var player: MediaPlayer? = null
     private val handler = android.os.Handler(Looper.getMainLooper())
     private var progressRunnable: Runnable? = null
+    fun getAudioFile(): File? = audioFile
 
     fun release() {
         mediaRecorder?.release()
