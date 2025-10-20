@@ -1,6 +1,8 @@
 [submodule "third_party/executorch"]
 	path = third_party/executorch
 	url = https://github.com/pytorch/executorch
+	ignore = untracked
 [submodule "third_party/models/Llama3.2-1B"]
 	path = third_party/models/Llama3.2-1B
 	url = https://huggingface.co/meta-llama/Llama-3.2-1B
+	ignore = untracked
