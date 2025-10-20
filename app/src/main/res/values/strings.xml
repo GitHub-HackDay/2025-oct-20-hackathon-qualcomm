@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TinyStories</string>
+    
+    <!-- Main screen strings -->
+    <string name="tell_your_story">Tell Your Story!</string>
+    <string name="record_instruction">Press the button and tell me about your favorite character!</string>
+    <string name="start_recording">Start Recording</string>
+    <string name="stop_recording">Stop Recording</string>
+    <string name="recording_duration">Recording: %1$ds</string>
+    <string name="what_i_heard">What I heard:</string>
+    <string name="create_character">Create My Character!</string>
+    <string name="my_gallery">My Gallery</string>
+    
+    <!-- Generation screen strings -->
+    <string name="creating_magic">Creating Magic ✨</string>
+    <string name="processing_story">Processing your story...</string>
+    <string name="understanding_character">Understanding your character...</string>
+    <string name="creating_description">Creating visual description...</string>
+    <string name="generating_character">Generating your character...</string>
+    <string name="adding_touches">Adding final touches...</string>
+    <string name="character_ready">Your Character is Ready! 🎉</string>
+    <string name="your_story">Your Story:</string>
+    <string name="try_again">Try Again</string>
+    <string name="keep_it">Keep It!</string>
+    
+    <!-- Gallery screen strings -->
+    <string name="story_gallery">📚 My Story Gallery</string>
+    <string name="no_stories_yet">No Stories Yet!</string>
+    <string name="first_story_prompt">Start by telling your first story. Your magical characters will appear here!</string>
+    <string name="tell_first_story">Tell Your First Story</string>
+    
+    <!-- Error strings -->
+    <string name="recording_error">Failed to record audio</string>
+    <string name="generation_error">Failed to generate character</string>
+    <string name="something_went_wrong">Oops! Something went wrong</string>
+    
+    <!-- Permission strings -->
+    <string name="microphone_permission_required">Microphone permission is required to record your stories</string>
+    <string name="grant_permission">Grant Permission</string>
+    
+    <!-- Common strings -->
+    <string name="back">Back</string>
+    <string name="gallery">Gallery</string>
+    <string name="favorite">Favorite</string>
+    <string name="more_options">More options</string>
+    <string name="share">Share</string>
+    <string name="delete">Delete</string>
+    <string name="refresh">Refresh</string>
+</resources>

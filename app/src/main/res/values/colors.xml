@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material Design Colors -->
+    <color name="purple_80">#FFD0BCFF</color>
+    <color name="purple_grey_80">#FFCCC2DC</color>
+    <color name="pink_80">#FFEFB8C8</color>
+
+    <color name="purple_40">#FF6650A4</color>
+    <color name="purple_grey_40">#FF625B71</color>
+    <color name="pink_40">#FF7D5260</color>
+
+    <!-- TinyStories Brand Colors -->
+    <color name="story_blue">#FF4FC3F7</color>
+    <color name="story_blue_light">#FFE1F5FE</color>
+    <color name="story_pink">#FFFF8A9B</color>
+    <color name="story_pink_light">#FFFCE4EC</color>
+    <color name="story_yellow">#FFFFFD54F</color>
+    <color name="story_green">#FF81C784</color>
+    <color name="story_orange">#FFFFB74D</color>
+    <color name="story_purple">#FFBA68C8</color>
+
+    <!-- Neutral Colors -->
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="light_background">#FFF8F9FA</color>
+    <color name="dark_background">#FF121212</color>
+    <color name="primary_text">#FF2E2E2E</color>
+    <color name="secondary_text">#FF6A6A6A</color>
+</resources>

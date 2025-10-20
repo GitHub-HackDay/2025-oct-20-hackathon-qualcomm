@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme -->
+    <style name="Theme.TinyStories" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Primary brand color -->
+        <item name="colorPrimary">@color/story_blue</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <!-- Primary variant color -->
+        <item name="colorPrimaryContainer">@color/story_blue_light</item>
+        <item name="colorOnPrimaryContainer">@color/primary_text</item>
+        <!-- Secondary brand color -->
+        <item name="colorSecondary">@color/story_pink</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="colorSecondaryContainer">@color/story_pink_light</item>
+        <item name="colorOnSecondaryContainer">@color/primary_text</item>
+        <!-- Status bar color -->
+        <item name="android:statusBarColor">@color/story_blue</item>
+        <!-- Background color -->
+        <item name="colorSurface">@color/light_background</item>
+        <item name="colorOnSurface">@color/primary_text</item>
+        <!-- Window background -->
+        <item name="android:windowBackground">@color/light_background</item>
+    </style>
+</resources>
